@@ -1,0 +1,66 @@
+name: Native Mac release
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: HTTPS address of the authenticated encrypted build snapshot
+        required: true
+      sha256:
+        description: SHA-256 of the encrypted snapshot
+        required: true
+      runner:
+        description: Standard Mac runner
+        type: choice
+        options: [macos-15, macos-15-intel]
+        default: macos-15
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Authenticate and open the snapshot
+        env:
+          SNAPSHOT_URL: ${{ inputs.url }}
+          SNAPSHOT_SHA: ${{ inputs.sha256 }}
+          BUNDLE_KEY: ${{ secrets.BUNDLE_KEY }}
+        run: |
+          set -euo pipefail
+          [[ "$SNAPSHOT_URL" == https://* ]]
+          [[ "$SNAPSHOT_SHA" =~ ^[0-9a-f]{64}$ ]]
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' "$SNAPSHOT_URL" -o "$RUNNER_TEMP/snapshot.enc"
+          echo "$SNAPSHOT_SHA  $RUNNER_TEMP/snapshot.enc" | shasum -a 256 --check
+          node crypto.mjs decrypt "$RUNNER_TEMP/snapshot.enc" "$RUNNER_TEMP/snapshot.tar.gz"
+          mkdir "$RUNNER_TEMP/payload"
+          tar -xzf "$RUNNER_TEMP/snapshot.tar.gz" -C "$RUNNER_TEMP/payload"
+      - name: Build and verify
+        run: |
+          set +e
+          bash "$RUNNER_TEMP/payload/source/app/scripts/mac-release-ci.sh" > "$RUNNER_TEMP/build.log" 2>&1
+          result=$?
+          echo "$result" > "$RUNNER_TEMP/build-exit-code"
+          if [ "$result" != 0 ]; then echo 'Native build failed. Its encrypted log is attached.'; exit "$result"; fi
+          echo 'Native build, signing verification and shared-file parity passed.'
+      - name: Encrypt build diagnostics
+        if: always()
+        env:
+          BUNDLE_KEY: ${{ secrets.BUNDLE_KEY }}
+        run: |
+          test -f "$RUNNER_TEMP/build.log" || echo 'Build did not start' > "$RUNNER_TEMP/build.log"
+          mkdir -p results
+          node crypto.mjs encrypt "$RUNNER_TEMP/build.log" results/build-log.enc
+          if [ "$(cat "$RUNNER_TEMP/build-exit-code" 2>/dev/null)" = 0 ]; then cp "$RUNNER_TEMP/payload/results/"* results/; fi
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: volume-${{ inputs.runner }}-${{ github.run_number }}
+          path: results/
+          retention-days: 3
+          if-no-files-found: error
