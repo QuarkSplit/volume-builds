@@ -1,0 +1,50 @@
+name: Verify packaged Mac application
+on:
+  workflow_dispatch:
+    inputs:
+      run:
+        description: Successful native-build run ID
+        required: true
+      artifact:
+        description: Build artifact name
+        required: true
+      runner:
+        type: choice
+        options: [macos-15, macos-15-intel]
+        default: macos-15
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v7
+        with:
+          name: ${{ inputs.artifact }}
+          run-id: ${{ inputs.run }}
+          github-token: ${{ github.token }}
+          path: package
+      - name: Test the installed package
+        run: bash verify-dmg.sh > "$RUNNER_TEMP/verify.log" 2>&1
+      - name: Encrypt verification diagnostics
+        if: always()
+        env:
+          BUNDLE_KEY: ${{ secrets.BUNDLE_KEY }}
+        run: |
+          test -f "$RUNNER_TEMP/verify.log" || echo 'Verification did not start' > "$RUNNER_TEMP/verify.log"
+          mkdir -p results
+          node crypto.mjs encrypt "$RUNNER_TEMP/verify.log" results/verification-log.enc
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: verification-${{ inputs.runner }}-${{ github.run_number }}
+          path: results/
+          retention-days: 3

@@ -26,6 +26,11 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
+      - uses: actions/cache/restore@v5
+        id: snapshot-cache
+        with:
+          path: ${{ runner.temp }}/snapshot.enc
+          key: volume-encrypted-snapshot-${{ inputs.sha256 }}
       - name: Authenticate and open the snapshot
         env:
           SNAPSHOT_URL: ${{ inputs.url }}
@@ -35,11 +40,16 @@ jobs:
           set -euo pipefail
           [[ "$SNAPSHOT_URL" == https://* ]]
           [[ "$SNAPSHOT_SHA" =~ ^[0-9a-f]{64}$ ]]
-          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' "$SNAPSHOT_URL" -o "$RUNNER_TEMP/snapshot.enc"
+          if [ ! -f "$RUNNER_TEMP/snapshot.enc" ]; then curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' "$SNAPSHOT_URL" -o "$RUNNER_TEMP/snapshot.enc"; fi
           echo "$SNAPSHOT_SHA  $RUNNER_TEMP/snapshot.enc" | shasum -a 256 --check
           node crypto.mjs decrypt "$RUNNER_TEMP/snapshot.enc" "$RUNNER_TEMP/snapshot.tar.gz"
           mkdir "$RUNNER_TEMP/payload"
           tar -xzf "$RUNNER_TEMP/snapshot.tar.gz" -C "$RUNNER_TEMP/payload"
+      - uses: actions/cache/save@v5
+        if: steps.snapshot-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/snapshot.enc
+          key: volume-encrypted-snapshot-${{ inputs.sha256 }}
       - name: Build and verify
         run: |
           set +e
