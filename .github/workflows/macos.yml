@@ -8,6 +8,12 @@ on:
       sha256:
         description: SHA-256 of the encrypted snapshot
         required: true
+      overlay_url:
+        description: Optional encrypted source correction archive
+        required: false
+      overlay_sha256:
+        description: SHA-256 of the encrypted correction archive
+        required: false
       runner:
         description: Standard Mac runner
         type: choice
@@ -50,6 +56,20 @@ jobs:
         with:
           path: ${{ runner.temp }}/snapshot.enc
           key: volume-encrypted-snapshot-${{ inputs.sha256 }}
+      - name: Apply authenticated source corrections
+        if: inputs.overlay_url != ''
+        env:
+          OVERLAY_URL: ${{ inputs.overlay_url }}
+          OVERLAY_SHA: ${{ inputs.overlay_sha256 }}
+          BUNDLE_KEY: ${{ secrets.BUNDLE_KEY }}
+        run: |
+          set -euo pipefail
+          [[ "$OVERLAY_URL" == https://* ]]
+          [[ "$OVERLAY_SHA" =~ ^[0-9a-f]{64}$ ]]
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' "$OVERLAY_URL" -o "$RUNNER_TEMP/overlay.enc"
+          echo "$OVERLAY_SHA  $RUNNER_TEMP/overlay.enc" | shasum -a 256 --check
+          node crypto.mjs decrypt "$RUNNER_TEMP/overlay.enc" "$RUNNER_TEMP/overlay.tar.gz"
+          tar -xzf "$RUNNER_TEMP/overlay.tar.gz" -C "$RUNNER_TEMP/payload"
       - name: Build and verify
         run: |
           set +e
