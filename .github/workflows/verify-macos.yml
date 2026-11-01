@@ -12,6 +12,10 @@ on:
         type: choice
         options: [macos-15, macos-15-intel]
         default: macos-15
+      mode:
+        type: choice
+        options: [package, voices]
+        default: package
 permissions:
   contents: read
   actions: read
@@ -33,7 +37,10 @@ jobs:
           github-token: ${{ github.token }}
           path: package
       - name: Test the installed package
-        run: bash verify-dmg.sh > "$RUNNER_TEMP/verify.log" 2>&1
+        env:
+          VERIFY_MODE: ${{ inputs.mode }}
+        run: |
+          if [ "$VERIFY_MODE" = voices ]; then bash verify-voice-dmg.sh > "$RUNNER_TEMP/verify.log" 2>&1; else bash verify-dmg.sh > "$RUNNER_TEMP/verify.log" 2>&1; fi
       - name: Encrypt verification diagnostics
         if: always()
         env:
