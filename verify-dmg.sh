@@ -11,6 +11,21 @@ ditto "$app" "$RUNNER_TEMP/install/Volume.app"
 hdiutil detach "$RUNNER_TEMP/mounted"
 app="$RUNNER_TEMP/install/Volume.app"
 /usr/libexec/PlistBuddy -c 'Set LSMinimumSystemVersion 15.4' "$app/Contents/Info.plist"
+python3 - "$app/Contents/Resources/runtime-bin/THIRD-PARTY.txt" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+text = p.read_text().replace(", Vulkan build", ", Metal build")
+if "libomp.dll" in text:
+    text = text.split("libomp.dll", 1)[0] + """Bundled macOS audio tools: FFmpeg n8.1 (LGPL-2.1-or-later), with Opus 1.5.2 (BSD).
+The executables and dynamic libraries are separate, replaceable files.
+Licences and source links: runtime-bin/ffmpeg/licenses/.
+FFmpeg source: https://github.com/FFmpeg/FFmpeg/tree/9047fa1b084f76b1b4d065af2d743df1b40dfb56
+Opus source: https://github.com/xiph/opus/tree/v1.5.2
+Python, worker/core packages and models are installed on first run from their publishers.
+"""
+p.write_text(text)
+PY
 codesign --force --deep --sign - "$app"
 codesign --verify --deep --strict "$app"
 resources="$app/Contents/Resources"
@@ -31,7 +46,7 @@ py="$RUNNER_TEMP/core/bin/python"
 "$tools/uv" pip install --python "$py" -r "$runtime/core/pyproject.toml"
 export PYTHONPATH="$runtime/core/src"
 "$py" -c 'import mathcat; text=mathcat.MathCAT().speak_latex(r"\frac{a+b}{c}"); assert "fraction" in text; print("Packaged MathCAT passed")'
-"$py" -m vivavoce --help
+"$py" -m vivavoce.cli --help
 executable="$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$app/Contents/Info.plist")"
 export VIVAVOCE_PROFILE="$RUNNER_TEMP/fresh-profile"
 "$app/Contents/MacOS/$executable" > "$RUNNER_TEMP/app.log" 2>&1 &
