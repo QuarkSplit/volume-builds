@@ -10,6 +10,7 @@ final class AudioResult: NSObject, WKScriptMessageHandler {
 }
 
 let audio = try Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1]))
+let application = NSApplication.shared
 let handler = AudioResult()
 let configuration = WKWebViewConfiguration()
 configuration.mediaTypesRequiringUserActionForPlayback = []
@@ -33,4 +34,4 @@ DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
     print("WebKit audio did not advance")
     exit(1)
 }
-NSApplication.shared.run()
+application.run()
