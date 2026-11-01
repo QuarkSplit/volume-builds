@@ -70,8 +70,33 @@ jobs:
           echo "$OVERLAY_SHA  $RUNNER_TEMP/overlay.enc" | shasum -a 256 --check
           node crypto.mjs decrypt "$RUNNER_TEMP/overlay.enc" "$RUNNER_TEMP/overlay.tar.gz"
           tar -xzf "$RUNNER_TEMP/overlay.tar.gz" -C "$RUNNER_TEMP/payload"
+      - uses: actions/cache/restore@v5
+        id: native-cache
+        with:
+          path: ${{ runner.temp }}/native.enc
+          key: volume-native-v1-${{ runner.arch }}-${{ inputs.sha256 }}
+      - name: Restore authenticated native dependencies
+        if: steps.native-cache.outputs.cache-hit == 'true'
+        env:
+          BUNDLE_KEY: ${{ secrets.BUNDLE_KEY }}
+        run: |
+          node crypto.mjs decrypt "$RUNNER_TEMP/native.enc" "$RUNNER_TEMP/native.tar.gz"
+          tar -xzf "$RUNNER_TEMP/native.tar.gz" -C "$RUNNER_TEMP/payload"
       - name: Build native dependencies
+        if: steps.native-cache.outputs.cache-hit != 'true'
         run: bash "$RUNNER_TEMP/payload/source/app/scripts/mac-release-ci.sh" native >> "$RUNNER_TEMP/build.log" 2>&1
+      - name: Encrypt native dependency cache
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        env:
+          BUNDLE_KEY: ${{ secrets.BUNDLE_KEY }}
+        run: |
+          tar -czf "$RUNNER_TEMP/native.tar.gz" -C "$RUNNER_TEMP/payload" audio source/vendor/wheels
+          node crypto.mjs encrypt "$RUNNER_TEMP/native.tar.gz" "$RUNNER_TEMP/native.enc"
+      - uses: actions/cache/save@v5
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/native.enc
+          key: volume-native-v1-${{ runner.arch }}-${{ inputs.sha256 }}
       - name: Check the application
         run: bash "$RUNNER_TEMP/payload/source/app/scripts/mac-release-ci.sh" checks >> "$RUNNER_TEMP/build.log" 2>&1
       - name: Package and verify
