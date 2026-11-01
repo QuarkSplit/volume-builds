@@ -40,11 +40,13 @@ trap 'kill "$app_pid" 2>/dev/null || true' EXIT
 sleep 15
 kill -0 "$app_pid"
 if grep -E 'panicked at|fatal error|dyld.*not loaded|React error #' "$RUNNER_TEMP/app.log"; then exit 1; fi
+screencapture -x "$RUNNER_TEMP/mac-startup.png" || true
 cat "$RUNNER_TEMP/app.log"
 echo 'Packaged native tools, audio encoding, clean Python environment, maths speech and application startup passed.'
 kill "$app_pid"
 wait "$app_pid" || true
 mkdir -p results
+if [ -s "$RUNNER_TEMP/mac-startup.png" ]; then cp "$RUNNER_TEMP/mac-startup.png" results/; fi
 ln -s /Applications "$RUNNER_TEMP/install/Applications"
 name="$(basename "$image")"
 hdiutil create -volname Volume -srcfolder "$RUNNER_TEMP/install" -format UDZO "results/$name"
