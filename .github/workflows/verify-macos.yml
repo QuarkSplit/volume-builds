@@ -14,7 +14,7 @@ on:
         default: macos-15
       mode:
         type: choice
-        options: [package, voices]
+        options: [package, voices, startup]
         default: package
 permissions:
   contents: read
@@ -40,7 +40,11 @@ jobs:
         env:
           VERIFY_MODE: ${{ inputs.mode }}
         run: |
-          if [ "$VERIFY_MODE" = voices ]; then bash verify-voice-dmg.sh > "$RUNNER_TEMP/verify.log" 2>&1; else bash verify-dmg.sh > "$RUNNER_TEMP/verify.log" 2>&1; fi
+          case "$VERIFY_MODE" in
+            voices) bash verify-voice-dmg.sh > "$RUNNER_TEMP/verify.log" 2>&1 ;;
+            startup) bash diagnose-startup.sh > "$RUNNER_TEMP/verify.log" 2>&1 ;;
+            *) bash verify-dmg.sh > "$RUNNER_TEMP/verify.log" 2>&1 ;;
+          esac
       - name: Encrypt verification diagnostics
         if: always()
         env:
