@@ -17,7 +17,7 @@ on:
       runner:
         description: Standard Mac runner
         type: choice
-        options: [macos-15, macos-15-intel]
+        options: [macos-15]
         default: macos-15
 permissions:
   contents: read
@@ -70,10 +70,14 @@ jobs:
           echo "$OVERLAY_SHA  $RUNNER_TEMP/overlay.enc" | shasum -a 256 --check
           node crypto.mjs decrypt "$RUNNER_TEMP/overlay.enc" "$RUNNER_TEMP/overlay.tar.gz"
           tar -xzf "$RUNNER_TEMP/overlay.tar.gz" -C "$RUNNER_TEMP/payload"
-      - name: Build and verify
+      - name: Build native dependencies
+        run: bash "$RUNNER_TEMP/payload/source/app/scripts/mac-release-ci.sh" native >> "$RUNNER_TEMP/build.log" 2>&1
+      - name: Check the application
+        run: bash "$RUNNER_TEMP/payload/source/app/scripts/mac-release-ci.sh" checks >> "$RUNNER_TEMP/build.log" 2>&1
+      - name: Package and verify
         run: |
           set +e
-          bash "$RUNNER_TEMP/payload/source/app/scripts/mac-release-ci.sh" > "$RUNNER_TEMP/build.log" 2>&1
+          bash "$RUNNER_TEMP/payload/source/app/scripts/mac-release-ci.sh" package >> "$RUNNER_TEMP/build.log" 2>&1
           result=$?
           echo "$result" > "$RUNNER_TEMP/build-exit-code"
           if [ "$result" != 0 ]; then echo 'Native build failed. Its encrypted log is attached.'; exit "$result"; fi
